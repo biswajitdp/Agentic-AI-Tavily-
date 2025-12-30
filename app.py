@@ -8,6 +8,7 @@ import logging
 import sys
 from datetime import datetime
 import time
+import os
 
 # Configure logging
 logging.basicConfig(
@@ -43,9 +44,13 @@ st.markdown("""
         margin: 0;
         padding: 0;
     }
+    body, .stApp {
+        background: linear-gradient(135deg, #1e1e2e 0%, #2d2d44 100%) !important;
+        color: white !important;
+    }
     .main {
+        background: linear-gradient(135deg, #1e1e2e 0%, #2d2d44 100%) !important;
         padding: 3rem 1rem;
-        background: linear-gradient(135deg, #1e1e2e 0%, #2d2d44 100%);
         min-height: 100vh;
     }
     .stChatMessage {
@@ -57,25 +62,54 @@ st.markdown("""
         margin-bottom: 3rem;
         color: white;
     }
+    .title-section h1 {
+        color: white;
+        font-size: 2.5rem;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+    }
     .input-section {
         display: flex;
         gap: 1rem;
         margin-bottom: 2rem;
     }
     .response-box {
-        background: rgba(255, 255, 255, 0.05);
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.15);
         border-radius: 1rem;
         padding: 2rem;
-        color: white;
+        color: #e0e0e0;
         margin-top: 2rem;
+        line-height: 1.6;
+        font-size: 1.05rem;
+    }
+    .stTextInput {
+        color: white !important;
     }
     .stTextInput > div > div > input {
-        background: rgba(255, 255, 255, 0.1) !important;
-        border: 1px solid rgba(255, 255, 255, 0.2) !important;
+        background: rgba(255, 255, 255, 0.12) !important;
+        border: 2px solid rgba(255, 255, 255, 0.25) !important;
         color: white !important;
         border-radius: 0.75rem !important;
         padding: 1rem !important;
+        font-size: 1rem !important;
+        caret-color: white !important;
+    }
+    .stTextInput > div > div > input::placeholder {
+        color: rgba(255, 255, 255, 0.6) !important;
+    }
+    .stTextInput input {
+        color: white !important;
+        background-color: rgba(255, 255, 255, 0.12) !important;
+        caret-color: white !important;
+    }
+    input[type="text"] {
+        color: white !important;
+        background-color: rgba(255, 255, 255, 0.12) !important;
+        caret-color: white !important;
+    }
+    input[type="text"]::placeholder {
+        color: rgba(255, 255, 255, 0.6) !important;
     }
     .stButton > button {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
@@ -85,9 +119,11 @@ st.markdown("""
         border-radius: 0.75rem !important;
         font-weight: 600 !important;
         width: 100% !important;
+        transition: all 0.3s ease !important;
     }
     .stButton > button:hover {
         opacity: 0.9 !important;
+        transform: translateY(-2px) !important;
     }
     @keyframes blink {
         0%, 49% { opacity: 1; }
@@ -103,11 +139,23 @@ logger.info("ChatOpenAI LLM initialized successfully")
 
 # Create the Tavily search tool using the decorator
 logger.info("Creating Tavily search tool")
+
+# Check if TAVILY_API_KEY is available
+tavily_api_key = os.getenv('TAVILY_API_KEY')
+tavily_available = tavily_api_key is not None and tavily_api_key.strip() != ""
+
+if not tavily_available:
+    logger.warning("TAVILY_API_KEY not found. Tavily search tool will not be available.")
+
 @tool
 def tavily_search(query: str) -> str:
     """Search the internet for current information about a topic using Tavily Search. 
     Use this to find the latest news, events, and information about any topic."""
     logger.info(f"Tavily search initiated with query: {query}")
+    if not tavily_available:
+        error_msg = "Tavily search is not available. Please set the TAVILY_API_KEY environment variable."
+        logger.error(error_msg)
+        return error_msg
     try:
         tavily_tool = TavilySearchResults(max_results=5)
         logger.debug("Tavily tool instantiated")
@@ -120,8 +168,8 @@ def tavily_search(query: str) -> str:
         return error_msg
 logger.info("Tavily search tool created")
 
-# List of tools
-tools = [tavily_search]
+# List of tools - only include tavily_search if API key is available
+tools = [tavily_search] if tavily_available else []
 logger.info(f"Tools registered: {len(tools)} tool(s)")
 for tool_obj in tools:
     logger.debug(f"  - Tool: {tool_obj.name}")
@@ -159,8 +207,14 @@ def run_agent(user_input: str, status_placeholder):
     """Run the agentic AI loop with Streamlit integration"""
     logger.info(f"Agent started with user input: {user_input[:100]}...")
     
+    system_message = "You are a helpful AI assistant."
+    if tavily_available:
+        system_message += " When asked questions, search for the latest information and provide comprehensive answers based on what you find."
+    else:
+        system_message += " Note: You don't have access to real-time search. Provide answers based on your training data."
+    
     messages = [
-        SystemMessage(content="You are a helpful AI assistant. When asked questions, search for the latest information and provide comprehensive answers based on what you find."),
+        SystemMessage(content=system_message),
         HumanMessage(content=user_input)
     ]
     logger.debug(f"Initial messages count: {len(messages)}")
